@@ -1,0 +1,1 @@
+"""INSIGHT.AI application package."""
