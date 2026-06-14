@@ -1,4 +1,4 @@
-# ProjectINSIGHT.AI
+# INSIGHT.AI
 
 > AWS hybrid mode warning: use public/demo documents only. Retrieval, indexing, and storage stay local to the machine or EC2 instance, but retrieved excerpts are sent to Groq for answer generation. See `README_AWS_HYBRID.md` and `deploy/aws_deployment.md`.
 
@@ -34,6 +34,15 @@ Legacy `.xls` files may not work because `openpyxl` does not support true old-st
 - Groq LLM for AWS hybrid/demo chat
 - Optional local Ollama support in `functions/chat_engine.py`
 
+## Repository Contents
+
+- `functions/` - FastAPI backend, Streamlit UI, document loading, indexing, and chat setup.
+- `tests/` - unit tests for document loading and index cleanup.
+- `deploy/` - AWS systemd and Nginx templates.
+- `README_AWS_HYBRID.md` - EC2 deployment walkthrough.
+
+The repo intentionally does not include local `.env` files, virtual environments, uploaded documents, generated indexes, assessment reports, or bundled sample documents.
+
 ## Setup
 
 Create and activate a virtual environment:
@@ -46,7 +55,7 @@ venv\Scripts\activate
 Install dependencies:
 
 ```powershell
-pip install -r requirements-aws.txt
+pip install -r requirements.txt
 ```
 
 Create a local `.env` file from the example:
@@ -108,6 +117,12 @@ AWS is used as the host for the demo deployment:
 - Groq is still the external LLM provider.
 
 Deployment templates and notes are in `deploy/`.
+
+For EC2 setup, clone:
+
+```bash
+git clone https://github.com/faisalcn24/insight-ai-2.git /opt/insight-ai/app
+```
 
 ## Development
 

@@ -45,7 +45,7 @@ sudo chown -R ubuntu:ubuntu /opt/insight-ai
 Clone the project:
 
 ```bash
-git clone https://github.com/danielcha04/ProjectINSIGHT.AI.git /opt/insight-ai/app
+git clone https://github.com/faisalcn24/insight-ai-2.git /opt/insight-ai/app
 cd /opt/insight-ai/app
 ```
 
@@ -54,7 +54,7 @@ Create the virtual environment and install dependencies:
 ```bash
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements-aws.txt
+./venv/bin/pip install -r requirements.txt
 ```
 
 Create the production environment file:
@@ -137,7 +137,7 @@ Update the deployed app:
 ```bash
 cd /opt/insight-ai/app
 git pull
-./venv/bin/pip install -r requirements-aws.txt
+./venv/bin/pip install -r requirements.txt
 sudo systemctl restart insight-api insight-ui
 ```
 

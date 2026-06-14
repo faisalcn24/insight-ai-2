@@ -10,15 +10,15 @@ Use a small Ubuntu EC2 instance for a low-cost demo. AWS Free Tier credits or us
 
 ```bash
 sudo apt update
-sudo apt install -y python3.13 python3.13-venv nginx git
+sudo apt install -y python3 python3-venv nginx git
 sudo mkdir -p /opt/insight-ai/data /opt/insight-ai/app
 sudo chown -R ubuntu:ubuntu /opt/insight-ai
 
-git clone https://github.com/danielcha04/ProjectINSIGHT.AI.git /opt/insight-ai/app
+git clone https://github.com/faisalcn24/insight-ai-2.git /opt/insight-ai/app
 cd /opt/insight-ai/app
-python3.13 -m venv venv
+python3 -m venv venv
 ./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements-aws.txt
+./venv/bin/pip install -r requirements.txt
 ```
 
 Create `/opt/insight-ai/.env` from `.env.example` and set `GROQ_API_KEY`.

@@ -13,6 +13,7 @@ Local Ollama support remains in `functions/chat_engine.py`, but the FastAPI chat
 ## Entry Points
 - FastAPI backend: `functions/api.py`
 - Streamlit UI: `functions/dashboard.py`
+- Runtime dependency list: `requirements.txt`
 - Local backend command: `py -3.13 -m uvicorn functions.api:app --host 127.0.0.1 --port 8000`
 - Local UI command: `py -3.13 -m streamlit run functions/dashboard.py`
 - AWS deployment notes: `deploy/aws_deployment.md`
@@ -28,7 +29,16 @@ Important variables:
 - `INSIGHT_API_BASE_URL`: Streamlit API target, default `http://localhost:8000`.
 - `INSIGHT_LLM_PROVIDER`: used by `setup_models`; set to `groq` for hybrid mode.
 
-Do not commit real secrets. `.env` is ignored.
+Do not commit real secrets. `.env` is ignored and should be recreated from `.env.example` on each machine.
+
+## Repository Shape
+The repo is intentionally kept small:
+- `functions/`: application source.
+- `tests/`: unit tests.
+- `deploy/`: AWS systemd, Nginx, and deployment notes.
+- `README.md`, `README_AWS_HYBRID.md`, `CLAUDE.md`: project and agent documentation.
+
+Do not re-add generated files, local virtual environments, `.env`, cached indexes/uploads, assessment reports, or sample document bundles unless the user explicitly asks for them.
 
 ## Active Python Modules
 - `functions/api.py`
@@ -84,6 +94,8 @@ Configurable storage:
 - Indexes: `<INSIGHT_STORAGE_DIR>/indexes`
 - Registry: `<INSIGHT_STORAGE_DIR>/registry.json`
 
+Local development can use `.insight_data`; it is ignored by Git.
+
 Registry entries contain:
 - `folder_path`
 - `folder_name`
@@ -114,3 +126,4 @@ Verification commands:
 - Re-index documents after changing embeddings, chunking, storage paths, or document text formatting.
 - Prefer focused changes that preserve the current FastAPI service plus Streamlit UI split.
 - Keep secrets in environment variables or `.env`, never committed files.
+- Keep deployment docs pointed at `https://github.com/faisalcn24/insight-ai-2.git` unless the repo is renamed.
