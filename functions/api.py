@@ -1,5 +1,3 @@
-"""FastAPI backend for INSIGHT.AI."""
-
 from __future__ import annotations
 
 import shutil
@@ -10,23 +8,31 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 try:
-    from .chat_engine import ask_index, setup_embeddings, setup_groq_llm
+    from .chat_engine import ask_index_with_sources, retrieve_sources, setup_embeddings, setup_groq_llm
     from .config import ensure_storage_dirs, get_uploads_dir
     from .document_loader import load_documents
     from .index_manager import build_index, load_index, load_registry, remove_index, sanitize_index_id, update_registry
 except ImportError:
-    from chat_engine import ask_index, setup_embeddings, setup_groq_llm
+    from chat_engine import ask_index_with_sources, retrieve_sources, setup_embeddings, setup_groq_llm
     from config import ensure_storage_dirs, get_uploads_dir
     from document_loader import load_documents
     from index_manager import build_index, load_index, load_registry, remove_index, sanitize_index_id, update_registry
 
 
-app = FastAPI(title="INSIGHT.AI API")
+MAX_RETRIEVE_TOP_K = 20
+
+app = FastAPI(title="Document Analysis RAG API")
 
 
 class ChatRequest(BaseModel):
     index_id: str
     message: str
+
+
+class RetrieveRequest(BaseModel):
+    index_id: str
+    query: str
+    top_k: int = 5
 
 
 @app.on_event("startup")
@@ -49,20 +55,9 @@ def create_index(index_id: str | None = Form(default=None), files: list[UploadFi
     if not files:
         raise HTTPException(status_code=400, detail="At least one document is required")
 
-    raw_name = index_id or Path(files[0].filename or f"upload-{uuid.uuid4().hex[:8]}").stem
-    safe_index_id = sanitize_index_id(raw_name)
-    upload_dir = get_uploads_dir() / safe_index_id
-    if upload_dir.exists():
-        shutil.rmtree(upload_dir)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    for upload in files:
-        if not upload.filename:
-            continue
-        destination = upload_dir / Path(upload.filename).name
-        with destination.open("wb") as out_file:
-            shutil.copyfileobj(upload.file, out_file)
-
+    safe_index_id = sanitize_index_id(_default_index_id(index_id, files))
+    upload_dir = _replace_upload_dir(safe_index_id)
+    _save_uploads(files, upload_dir)
     raw_docs, warnings = load_documents(upload_dir)
     if not raw_docs:
         raise HTTPException(status_code=400, detail={"message": "No readable documents found", "warnings": warnings})
@@ -97,7 +92,52 @@ def chat(request: ChatRequest) -> dict:
         setup_embeddings()
         setup_groq_llm()
         index = load_index(safe_index_id)
-        answer = ask_index(index, request.message)
+        result = ask_index_with_sources(index, request.message)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Chat failed: {exc}") from exc
-    return {"answer": answer}
+    return result
+
+
+@app.post("/retrieve")
+def retrieve(request: RetrieveRequest) -> dict:
+    if not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query is required")
+    safe_index_id = sanitize_index_id(request.index_id)
+    if safe_index_id not in load_registry():
+        raise HTTPException(status_code=404, detail="Index not found")
+    top_k = _clamp_top_k(request.top_k)
+    try:
+        setup_embeddings()
+        index = load_index(safe_index_id)
+        sources = retrieve_sources(index, request.query, top_k=top_k)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Retrieve failed: {exc}") from exc
+    return {"sources": sources}
+
+
+def _default_index_id(index_id: str | None, files: list[UploadFile]) -> str:
+    if index_id:
+        return index_id
+    first_filename = files[0].filename or f"upload-{uuid.uuid4().hex[:8]}"
+    return Path(first_filename).stem
+
+
+def _replace_upload_dir(index_id: str) -> Path:
+    upload_dir = get_uploads_dir() / index_id
+    if upload_dir.exists():
+        shutil.rmtree(upload_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    return upload_dir
+
+
+def _save_uploads(files: list[UploadFile], upload_dir: Path) -> None:
+    for upload in files:
+        if not upload.filename:
+            continue
+        destination = upload_dir / Path(upload.filename).name
+        with destination.open("wb") as out_file:
+            shutil.copyfileobj(upload.file, out_file)
+
+
+def _clamp_top_k(value: int) -> int:
+    return min(max(value, 1), MAX_RETRIEVE_TOP_K)

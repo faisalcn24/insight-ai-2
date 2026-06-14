@@ -8,6 +8,22 @@ Use a small Ubuntu EC2 instance for a low-cost demo. AWS Free Tier credits or us
 
 ## Setup
 
+Recommended scripted setup:
+
+```bash
+sudo apt update
+sudo apt install -y git
+sudo mkdir -p /opt/insight-ai
+sudo chown -R ubuntu:ubuntu /opt/insight-ai
+git clone https://github.com/faisalcn24/insight-ai-2.git /opt/insight-ai/app
+cd /opt/insight-ai/app
+bash deploy/setup_ec2.sh
+nano /opt/insight-ai/.env
+sudo systemctl restart insight-api insight-ui
+```
+
+Manual setup:
+
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-venv nginx git

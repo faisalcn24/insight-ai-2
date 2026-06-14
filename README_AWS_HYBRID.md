@@ -1,6 +1,6 @@
-# INSIGHT.AI AWS Hybrid Mode
+# Document Analysis RAG AWS Hybrid Mode
 
-INSIGHT.AI can be deployed as a low-cost AWS demo on one EC2 instance. FastAPI, Streamlit, document parsing, embeddings, vector storage, and retrieval run on the instance. Groq generates the final answer, so retrieved excerpts are sent to Groq.
+Document Analysis RAG can be deployed as a low-cost AWS demo on one EC2 instance. FastAPI, Streamlit, document parsing, embeddings, vector storage, and retrieval run on the instance. Groq generates the final answer, so retrieved excerpts are sent to Groq.
 
 Use public/demo documents only in AWS hybrid mode.
 
@@ -33,7 +33,32 @@ Launch an Ubuntu EC2 instance and open inbound security group rules:
 - SSH `22` from your IP only.
 - HTTP `80` from anywhere for the demo.
 
+### Scripted Setup
+
 SSH into the instance, then install system packages:
+
+```bash
+sudo apt update
+sudo apt install -y git
+sudo mkdir -p /opt/insight-ai
+sudo chown -R ubuntu:ubuntu /opt/insight-ai
+git clone https://github.com/faisalcn24/insight-ai-2.git /opt/insight-ai/app
+cd /opt/insight-ai/app
+bash deploy/setup_ec2.sh
+```
+
+Then edit `/opt/insight-ai/.env`, set `GROQ_API_KEY`, and restart services:
+
+```bash
+nano /opt/insight-ai/.env
+sudo systemctl restart insight-api insight-ui
+```
+
+### Manual Setup
+
+Use this path if you want to run each step yourself or debug a failed scripted setup.
+
+Install system packages:
 
 ```bash
 sudo apt update
@@ -136,9 +161,7 @@ Update the deployed app:
 
 ```bash
 cd /opt/insight-ai/app
-git pull
-./venv/bin/pip install -r requirements.txt
-sudo systemctl restart insight-api insight-ui
+bash deploy/update_app.sh
 ```
 
 FastAPI endpoints:
@@ -148,5 +171,6 @@ FastAPI endpoints:
 - `POST /indexes` with multipart `files` and optional `index_id`
 - `DELETE /indexes/{index_id}`
 - `POST /chat` with `{"index_id": "...", "message": "..."}`
+- `POST /retrieve` with `{"index_id": "...", "query": "...", "top_k": 5}`
 
 AWS deployment templates are in `deploy/`.

@@ -1,16 +1,13 @@
-"""Configure LlamaIndex chat engines for local and AWS hybrid modes."""
-
 from __future__ import annotations
 
 import os
 from collections.abc import Generator
 from typing import Any
 
-from llama_index.core.llms import CompletionResponse, CustomLLM, LLMMetadata
 from llama_index.core import Settings
+from llama_index.core.llms import CompletionResponse, CustomLLM, LLMMetadata
 from llama_index.core.memory import ChatMemoryBuffer
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.ollama import Ollama
 from openai import OpenAI
 
 try:
@@ -29,8 +26,15 @@ SYSTEM_PROMPT = (
     "without omitting any rows or entries. Never summarise or truncate tabular data. "
     "For calculations like totals or averages, show your working step by step. "
     "If a calculation seems complex or you are uncertain of the result, clearly state the raw figures and "
-    "advise the user to verify calculations independently."
+    "advise the user to verify calculations independently. "
+    "Cite the source filename for every factual claim. "
+    "Do not add explanations, assumptions, or background knowledge that are not directly supported by the "
+    "retrieved context. If the retrieved context does not contain the answer, say that the answer is not "
+    "present in the provided documents."
 )
+
+DEFAULT_TOP_K = 3
+MAX_SOURCE_TEXT_CHARS = 700
 
 
 class GroqCompatibleLLM(CustomLLM):
@@ -75,10 +79,6 @@ def setup_embeddings():
     Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
 
-def setup_ollama_llm():
-    Settings.llm = Ollama(model="llama3.2:3b", request_timeout=300.0)
-
-
 def setup_groq_llm():
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
@@ -90,23 +90,52 @@ def setup_groq_llm():
     )
 
 
-def setup_models(provider: str | None = None):
-    setup_embeddings()
-    provider = provider or os.getenv("INSIGHT_LLM_PROVIDER", "ollama")
-    if provider.lower() == "groq":
-        setup_groq_llm()
-    else:
-        setup_ollama_llm()
-
-
 def create_chat_engine(index):
     return index.as_chat_engine(
         chat_mode="context",
-        similarity_top_k=5,
+        similarity_top_k=DEFAULT_TOP_K,
         memory=ChatMemoryBuffer.from_defaults(token_limit=3900),
         system_prompt=SYSTEM_PROMPT,
     )
 
 
-def ask_index(index, message: str) -> str:
-    return str(create_chat_engine(index).chat(message))
+def ask_index_with_sources(index, message: str) -> dict[str, Any]:
+    response = create_chat_engine(index).chat(message)
+    return {
+        "answer": str(response),
+        "sources": format_source_nodes(getattr(response, "source_nodes", [])),
+    }
+
+
+def retrieve_sources(index, query: str, top_k: int = DEFAULT_TOP_K) -> list[dict[str, Any]]:
+    retriever = index.as_retriever(similarity_top_k=top_k)
+    return format_source_nodes(retriever.retrieve(query))
+
+
+def format_source_nodes(source_nodes) -> list[dict[str, Any]]:
+    sources = []
+    for source_node in source_nodes:
+        node = getattr(source_node, "node", source_node)
+        metadata = getattr(node, "metadata", {}) or {}
+        text = _node_text(node)
+        score = getattr(source_node, "score", None)
+        sources.append({
+            "filename": metadata.get("filename", "unknown"),
+            "type": metadata.get("type", "unknown"),
+            "score": round(float(score), 4) if score is not None else None,
+            "text": _shorten_text(text),
+        })
+    return sources
+
+
+def _node_text(node) -> str:
+    if hasattr(node, "get_content"):
+        return node.get_content(metadata_mode="none")
+    return getattr(node, "text", "")
+
+
+def _shorten_text(text: str) -> str:
+    cleaned = " ".join(text.split())
+    if len(cleaned) <= MAX_SOURCE_TEXT_CHARS:
+        return cleaned
+    return cleaned[:MAX_SOURCE_TEXT_CHARS].rstrip() + "..."

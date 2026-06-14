@@ -21,3 +21,7 @@ registry.json
 .claude/
 
 fix_log.md
+aws_setup_notes.md
+CHANGELOG.md
+tests
+CLAUDE.md

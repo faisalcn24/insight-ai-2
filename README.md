@@ -1,102 +1,61 @@
-# INSIGHT.AI
+# Document Analysis RAG
 
-> AWS hybrid mode warning: use public/demo documents only. Retrieval, indexing, and storage stay local to the machine or EC2 instance, but retrieved excerpts are sent to Groq for answer generation. See `README_AWS_HYBRID.md` and `deploy/aws_deployment.md`.
+A document question-answering app for PDF, Word, and Excel files. It uses a FastAPI backend for ingestion/retrieval, a Streamlit UI for chat, local embeddings for search, and Groq for answer generation in the deployed demo.
 
-INSIGHT.AI is a document assistant for asking questions over uploaded PDF, Word, and Excel files. It uses a FastAPI backend for indexing/chat and a Streamlit UI for the browser experience.
+> Demo privacy note: retrieval, indexing, and storage run locally or on EC2, but retrieved excerpts are sent to Groq for final answer generation. Use public/demo documents only.
 
-## How It Works
+## Highlights
 
-1. Upload documents through the Streamlit UI.
-2. FastAPI stores the uploads locally under the configured storage directory.
-3. Documents are parsed based on file type.
-4. Text is chunked and embedded locally with `BAAI/bge-small-en-v1.5`.
-5. LlamaIndex stores the persisted vector index locally.
-6. Chat requests retrieve relevant chunks from the local index.
-7. Groq generates the final answer from the retrieved context.
+- Upload PDF, DOCX, and XLSX files into named searchable collections.
+- Embed and retrieve locally with `BAAI/bge-small-en-v1.5`.
+- Persist uploaded files, vector indexes, and collection metadata across restarts.
+- Return source snippets and retrieval scores with each answer.
+- Expose `POST /retrieve` to inspect retrieved chunks without calling the LLM.
+- Use document-aware chunking: smaller overlapping chunks for text, larger chunks for spreadsheets.
+- Deploy on one Ubuntu EC2 instance with systemd, Nginx, and repeatable setup scripts.
 
-## Supported File Types
+## Demo Results
 
-| Format | Library |
+| Question | Result |
 | --- | --- |
-| `.pdf` | `pypdf` |
-| `.docx` | `python-docx` |
-| `.xlsx` | `openpyxl` |
+| What does FR-006 require? | Correctly answered from the product requirements document with a source snippet. |
+| What is the Q3 Groq API budget? | Retrieved the spreadsheet value `75` from the budget workbook. |
+| Why did `/api/health` return a 404? | Explained the Nginx config/default site issue from the incident log. |
+| What is the company payroll for 2026? | Correctly said the answer is not present in the documents. |
 
-Legacy `.xls` files may not work because `openpyxl` does not support true old-style binary Excel files.
+## Evaluation Snapshot
 
-## Project Stack
+Tested against the synthetic corpus in `documents/` using local Ollama `llama3.1:8b` for answer generation. The deployed demo uses Groq for faster responses.
 
-- Python 3.13
-- FastAPI backend
-- Streamlit UI
-- LlamaIndex retrieval/indexing
-- HuggingFace local embeddings: `BAAI/bge-small-en-v1.5`
-- Groq LLM for AWS hybrid/demo chat
-- Optional local Ollama support in `functions/chat_engine.py`
+| Metric | Result |
+| --- | --- |
+| Recall@5 | 100% |
+| Citation Accuracy | 100% |
+| Answer Correctness | 100% |
+| Abstention Accuracy | 100% |
+| Faithfulness | 100% on curated corpus |
 
-## Repository Contents
-
-- `functions/` - FastAPI backend, Streamlit UI, document loading, indexing, and chat setup.
-- `tests/` - unit tests for document loading and index cleanup.
-- `deploy/` - AWS systemd and Nginx templates.
-- `README_AWS_HYBRID.md` - EC2 deployment walkthrough.
-
-The repo intentionally does not include local `.env` files, virtual environments, uploaded documents, generated indexes, assessment reports, or bundled sample documents.
-
-## Setup
-
-Create and activate a virtual environment:
-
-```powershell
-python -m venv venv
-venv\Scripts\activate
-```
-
-Install dependencies:
-
-```powershell
-pip install -r requirements.txt
-```
-
-Create a local `.env` file from the example:
-
-```powershell
-copy .env.example .env
-```
-
-Set at least:
-
-```env
-GROQ_API_KEY=replace-with-your-groq-key
-GROQ_MODEL=llama-3.1-8b-instant
-INSIGHT_API_BASE_URL=http://127.0.0.1:8000
-INSIGHT_STORAGE_DIR=C:\ICT\ProjectINSIGHT.AI\.insight_data
-```
-
-For AWS, use:
-
-```env
-INSIGHT_STORAGE_DIR=/opt/insight-ai/data
-```
-
-## Run Locally
-
-Start FastAPI in one terminal:
-
-```powershell
-py -3.13 -m uvicorn functions.api:app --host 127.0.0.1 --port 8000
-```
-
-Start Streamlit in another terminal:
-
-```powershell
-py -3.13 -m streamlit run functions/dashboard.py
-```
-
-Open:
+## Architecture
 
 ```text
-http://localhost:8501
+Streamlit UI
+    |
+    v
+FastAPI backend
+    |
+    +-- document parsing: pypdf, python-docx, openpyxl
+    +-- chunking: LlamaIndex SentenceSplitter
+    +-- embeddings: BAAI/bge-small-en-v1.5
+    +-- vector index: persisted LlamaIndex storage
+    +-- answer generation: Groq-compatible OpenAI API
+```
+
+AWS demo shape:
+
+```text
+public HTTP :80 -> Nginx
+    /api/*      -> FastAPI on 127.0.0.1:8000
+    /           -> Streamlit on 127.0.0.1:8501
 ```
 
 ## API
@@ -106,27 +65,66 @@ http://localhost:8501
 - `POST /indexes`
 - `DELETE /indexes/{index_id}`
 - `POST /chat`
+- `POST /retrieve`
+
+## Quick Start
+
+```powershell
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+```
+
+Set these values in `.env`:
+
+```env
+GROQ_API_KEY=replace-with-your-groq-key
+GROQ_MODEL=llama-3.1-8b-instant
+INSIGHT_API_BASE_URL=http://127.0.0.1:8000
+INSIGHT_STORAGE_DIR=.insight_data
+```
+
+Run the backend:
+
+```powershell
+py -3.13 -m uvicorn functions.api:app --host 127.0.0.1 --port 8000
+```
+
+Run the UI in another terminal:
+
+```powershell
+py -3.13 -m streamlit run functions/dashboard.py
+```
+
+Open `http://localhost:8501`.
 
 ## AWS Deployment
 
-AWS is used as the host for the demo deployment:
-
-- One EC2 instance runs FastAPI and Streamlit.
-- Local EC2 disk stores uploads, indexes, and `registry.json`.
-- Nginx routes `/api/*` to FastAPI and `/` to Streamlit.
-- Groq is still the external LLM provider.
-
 Deployment templates and notes are in `deploy/`.
 
-For EC2 setup, clone:
+Fresh EC2 setup after cloning:
 
 ```bash
-git clone https://github.com/faisalcn24/insight-ai-2.git /opt/insight-ai/app
+bash deploy/setup_ec2.sh
 ```
 
-## Development
+Update an existing EC2 deployment:
 
-Run checks:
+```bash
+bash deploy/update_app.sh
+```
+
+See [README_AWS_HYBRID.md](README_AWS_HYBRID.md) for the full EC2 walkthrough.
+
+## Repository Map
+
+- `functions/` - FastAPI backend, Streamlit UI, document loading, indexing, and chat setup.
+- `documents/` - synthetic public test corpus for RAG evaluation.
+- `tests/` - focused unit tests.
+- `deploy/` - systemd, Nginx, and EC2 deployment scripts.
+
+## Development Checks
 
 ```powershell
 py -3.13 -m compileall -q .\functions .\tests
@@ -134,4 +132,4 @@ py -3.13 -m pytest -q
 py -3.13 -m pip check
 ```
 
-Do not commit `.env`, uploaded documents, indexes, or secrets.
+Do not commit `.env`, uploaded documents with private data, generated indexes, virtual environments, or secrets.

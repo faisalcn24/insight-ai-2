@@ -1,5 +1,3 @@
-"""Load local .env files without requiring an extra dependency."""
-
 from __future__ import annotations
 
 import os
